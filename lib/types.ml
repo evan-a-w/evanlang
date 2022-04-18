@@ -25,5 +25,3 @@ type var =
       f: env -> var array -> env * var
     }
 and env = {outer: env option; map: (string, var) Hashtbl.t}
-
-type program = var list
