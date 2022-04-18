@@ -1,13 +1,22 @@
-open Parse
+open Types
 
-let delimiters = "();\"'`|[]{}"
-let whitespace = " \t\n\r"
+let getchar = Scanf.scanf "%c" (fun x -> x)
 
-let identifier = nonempty @@ split_parser (fun c ->
-    string_has "+-.*/<=>!?:$%_&~^" c
-    || Char.code 'a' <= Char.code c  && Char.code c <= Char.code 'z'
-    || Char.code 'A' <= Char.code c  && Char.code c <= Char.code 'Z')
+type lex_state = 
+  | Awaiting
+  | Number 
+  | Symbol 
+  | String 
+  | List 
+  | Array 
+  | Identifier
 
-let str = chara '"' << identifier >> chara '*'
+type lex_result =
+  | Number of string
+  | Symbol of string
+  | String of string
+  | List of lex_result list
+  | Array of lex_result list
+  | Identifier of string
 
-let symbol = chara '\'' << identifier
+type lexer = {c: char; prog: program; }
