@@ -259,3 +259,5 @@ and get_one_token reader =
     | Done -> unwrap l.token
     | _ -> aux (transition l) in
   aux lex
+
+type ast = lex_result list
