@@ -25,6 +25,7 @@ exception ConstructionError of char * string
 type parse_error = 
   | TypeError of {expected: Types.typ; found: Types.typ}
   | LitError of {expected: Types.typ; found: string}
+  | Malformed of string
   | ParseError of {expected: string; explanation: string}
 
 let catch_cons f = try Ok (f ()) with
@@ -52,12 +53,12 @@ class string_reader str = object
 end
 
 type lex_result =
-  | Number of string
-  | Symbol of string
-  | String of string
-  | Sexpr of lex_result list
-  | List of lex_result list
-  | Identifier of string
+  | NumberLit of string
+  | SymbolLit of string
+  | StringLit of string
+  | SexprLit of lex_result list
+  | ListLit of lex_result list
+  | IdentifierLit of string
 
 let join_list str l =
   let rec aux acc cl = match cl with
@@ -68,12 +69,12 @@ let join_list str l =
     | [] -> ""
 
 let rec string_of_lex_result x = Printf.(match x with
-  | Number s -> sprintf "%s." s
-  | Symbol s -> sprintf "'%s" s
-  | String s -> sprintf "\"%s\"" s
-  | Sexpr l -> sprintf "(%s)" (join_list ", " (List.map string_of_lex_result l))
-  | List l -> sprintf "'(%s)" (join_list ", " (List.map string_of_lex_result l))
-  | Identifier s -> sprintf "%s" s)
+  | NumberLit s -> sprintf "%s." s
+  | SymbolLit s -> sprintf "'%s" s
+  | StringLit s -> sprintf "\"%s\"" s
+  | SexprLit l -> sprintf "(%s)" (join_list ", " (List.map string_of_lex_result l))
+  | ListLit l -> sprintf "'(%s)" (join_list ", " (List.map string_of_lex_result l))
+  | IdentifierLit s -> sprintf "%s" s)
 
 let void _ = ()
 
@@ -118,12 +119,6 @@ type single_lexer = {
   reader: stream_reader;
 }
 
-exception UnwrapNone
-
-let unwrap x = match x with
-  | Some x -> x
-  | None -> raise UnwrapNone
-
 let whitespace c = c = ' ' || c = '\t' || c = '\n' || c = '\r'
 
 let delimiter c =
@@ -144,11 +139,11 @@ let get_string_state_funcs: char -> stream_reader -> (((string -> lex_result)
                                                        * (stream_reader -> unit)) option)
   = fun c r ->
   if identifier c then
-    Some ((fun x -> Identifier x), identifier, void)
+    Some ((fun x -> IdentifierLit x), identifier, void)
   else if is_number c then
-    Some ((fun x -> Number x), is_number, void)
+    Some ((fun x -> NumberLit x), is_number, void)
   else if c = '"' then
-    Some ((fun x -> String x)
+    Some ((fun x -> StringLit x)
           , (fun c -> c != '"')
           , (fun x -> try
                         let c = x#get_char in
@@ -163,7 +158,7 @@ let get_string_state_funcs: char -> stream_reader -> (((string -> lex_result)
        None)
     else (
       r#unget_char c;
-      Some ((fun x -> Symbol x), identifier, void))
+      Some ((fun x -> SymbolLit x), identifier, void))
   else
     None
 
@@ -181,13 +176,13 @@ let get_list_state_funcs: char -> stream_reader -> (((lex_result list -> lex_res
                                                      * (stream_reader -> unit))
                                                     option)
   = fun c r -> if c = '(' then
-    Some ((fun x -> Sexpr x), ')', (fun _ -> ()))
+    Some ((fun x -> SexprLit x), ')', (fun _ -> ()))
   else if c = '\'' then
     let c = r#get_char in
     if c != '(' then
       (r#unget_char c;
        None)
-    else Some ((fun x -> List x), ')', comma_sep)
+    else Some ((fun x -> ListLit x), ')', comma_sep)
   else
     None
 
@@ -271,6 +266,11 @@ and get_one_token reader =
 
 type ast = lex_result list
 
+let get_rest_of_reader reader =
+  let rec aux acc = 
+    try aux (reader#get_char :: acc) with End_of_file -> acc
+  in String.of_seq (List.to_seq (List.rev (aux [])))
+
 let read_ast reader =
   let next () = catch_cons (fun () -> get_one_token reader) in
   let rec aux acc = match next () with
@@ -283,5 +283,5 @@ let read_ast reader =
             explanation = Printf.sprintf "Received string: \"%s\"" s
           }
         )
-  in aux
+  in Result.map List.rev (aux [])
 
