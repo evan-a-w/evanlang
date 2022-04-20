@@ -1,7 +1,8 @@
 type typ =
   | Null
   | Bool
-  | Number
+  | Int
+  | Float
   | String
   | Array
   | Symbol
@@ -50,13 +51,16 @@ and generic =
   | Traits of trait list
   | Val of typ
 
+type type_id = int
+
 
 (* For the interpreter, type checking should be done by the time this is used
  * so runtime type errors should never occur *)
 type type_instance =
   | Null
   | Bool of bool
-  | Number of float
+  | Int of int
+  | Float of float
   | String of string
   | Array of type_instance array
   | Symbol of string
@@ -64,21 +68,21 @@ type type_instance =
   | List of type_instance list
   | Map of (string, type_instance) Hashtbl.t
   | Sepxr of type_instance array
-  | Custom of {typ: custom_type; value: custom_instance}
+  | Custom of {type_id: type_id; value: custom_instance}
   | Func of func
   | Env of env
-and env = {outer: env option; variables: (string, typ) Hashtbl.t}
+and env = {outer: env option; variables: (string, type_instance) Hashtbl.t}
 and func = 
   | Native of {
-        args: (string * typ) list;
+        args: (string * type_id) list;
         func: env -> ((string * type_instance) list) -> (env * type_instance)
     }
   | Runtime of {
-        args: (string * typ) list;
+        args: (string * type_id) list;
         env: env;
         sexpr: type_instance array;
     }
 and custom_instance = {
-    typ: custom_type;
+    type_id: type_id;
     fields: (string, type_instance) Hashtbl.t
 }

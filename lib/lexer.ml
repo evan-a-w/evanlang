@@ -22,6 +22,17 @@ exception EOF
 
 exception ConstructionError of char * string
 
+type parse_error = 
+  | TypeError of {expected: Types.typ; found: Types.typ}
+  | LitError of {expected: Types.typ; found: string}
+  | ParseError of {expected: string; explanation: string}
+
+let catch_cons f = try Ok (f ()) with
+    ConstructionError (expected, s) -> Error (ParseError {
+                                         expected = Printf.sprintf "'%c'" expected; 
+                                         explanation = s
+                                       })
+
 class string_reader str = object
   inherit stream_reader
   val mutable index = 0 
@@ -47,7 +58,6 @@ type lex_result =
   | Sexpr of lex_result list
   | List of lex_result list
   | Identifier of string
-  | Unit
 
 let join_list str l =
   let rec aux acc cl = match cl with
@@ -63,8 +73,7 @@ let rec string_of_lex_result x = Printf.(match x with
   | String s -> sprintf "\"%s\"" s
   | Sexpr l -> sprintf "(%s)" (join_list ", " (List.map string_of_lex_result l))
   | List l -> sprintf "'(%s)" (join_list ", " (List.map string_of_lex_result l))
-  | Identifier s -> sprintf "%s" s
-  | Unit -> sprintf "Unit")
+  | Identifier s -> sprintf "%s" s)
 
 let void _ = ()
 
@@ -261,3 +270,18 @@ and get_one_token reader =
   aux lex
 
 type ast = lex_result list
+
+let read_ast reader =
+  let next () = catch_cons (fun () -> get_one_token reader) in
+  let rec aux acc = match next () with
+    | Ok v -> aux (v :: acc)
+    | Error _ -> match get_rest_of_reader reader with
+      | "" -> Ok (List.rev acc)
+      | s ->  Error (
+          ParseError {
+            expected = "EOF"; 
+            explanation = Printf.sprintf "Received string: \"%s\"" s
+          }
+        )
+  in aux
+
