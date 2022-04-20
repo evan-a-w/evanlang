@@ -84,8 +84,8 @@ and func =
         sexpr: type_instance array;
     }
 and custom_instance = {
-    type_id: typ;
-    fields: (string, type_instance) Hashtbl.t
+  type_id: typ;
+  fields: (string, type_instance) Hashtbl.t
 }
 
 let ftype = function
