@@ -1,3 +1,5 @@
+open Types
+
 let getchar () = Scanf.scanf "%c" (fun x -> x)
 
 class virtual stream_reader = object
@@ -21,12 +23,6 @@ end
 exception EOF
 
 exception ConstructionError of char * string
-
-type parse_error = 
-  | TypeError of {expected: Types.typ; found: Types.typ}
-  | LitError of {expected: Types.typ; found: string}
-  | Malformed of string
-  | ParseError of {expected: string; explanation: string}
 
 let catch_cons f = try Ok (f ()) with
     ConstructionError (expected, s) -> Error (ParseError {

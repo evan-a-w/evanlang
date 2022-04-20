@@ -1,4 +1,4 @@
-type typ =
+type type_val =
   | Null_
   | Bool_
   | Int_
@@ -6,33 +6,32 @@ type typ =
   | String_
   | Symbol_
   | Identifier_
-  | Array_ of type_id
-  | List_ of type_id
-  | Map_ of type_id * type_id
+  | Array_ of typ
+  | List_ of typ
+  | Map_ of typ * typ
   | Sexpr_
   | Env_
   | SumOrProd of custom_type
-  | Custom_ of type_id (* refers to SumOrProd usually - could also be a unique base type ig *)
   | Func_ of func_type
   | Generic_ of generic
 and func_type = {
   func_id: int; (* id used to index into map *)
-  args: (string * type_id) list; 
+  args: (string * typ) list; 
   native: bool
 }
+and typ = type_val * int
 and type_env = {
   outer: type_env option; 
-  mutable variables: (string, type_id) Hashtbl.t;
+  mutable variables: (string, typ) Hashtbl.t;
   mutable functions: (int, func_type) Hashtbl.t;
-  mutable types: (type_id, typ) Hashtbl.t;
-  mutable traits: (type_id, trait) Hashtbl.t;
-  mutable next_type_id: int;
-  mutable next_func_id: int
+  mutable traits: (int, trait) Hashtbl.t;
+  next_type_id: int ref;
+  next_func_id: int ref
 }
-and sum_member = {tag: string; member_type: type_id}
+and sum_member = {tag: string; member_type: typ}
 and sum_type = sum_member list
 and product_type = {
-  fields: (string, type_id) Hashtbl.t;
+  fields: (string, typ) Hashtbl.t;
 }
 and custom_type =
   | Sum of sum_type
@@ -42,7 +41,7 @@ and trait_elem =
   | Trait of trait
   | Field of {
       name: string;
-      typ: type_id
+      typ: typ
     }
   | Method of {
       name: string;
@@ -50,8 +49,8 @@ and trait_elem =
     }
 and generic =
   | Traits of trait list
-  | Val of type_id
-and type_id = string
+  | Val of typ
+  | Any
 
 
 (* For the interpreter, type checking should be done by the time this is used
@@ -68,60 +67,71 @@ type type_instance =
   | List of type_instance list
   | Map of (string, type_instance) Hashtbl.t
   | Sexpr of type_instance list
-  | Custom of {type_id: type_id; value: custom_instance}
+  | Custom of {typ: typ; value: custom_instance}
   | Func of func
   | Env of env
 and env = {outer: env option; variables: (string, type_instance) Hashtbl.t}
 and func = 
   | Native of {
-        args: (string * type_id) list;
-        func_type: type_id;
+        args: (string * typ) list;
+        func_type: typ;
         func: env -> ((string * type_instance) list) -> (env * type_instance)
     }
   | Runtime of {
-        args: (string * type_id) list;
-        func_type: type_id;
+        args: (string * typ) list;
+        func_type: typ;
         env: env;
         sexpr: type_instance array;
     }
 and custom_instance = {
-    type_id: type_id;
+    type_id: typ;
     fields: (string, type_instance) Hashtbl.t
 }
 
 let ftype = function
-  | Native {args = al; func_type = i; func = _} -> 
-      {func_id = i; args = al; native = true}
-  | Runtime {args = al; func_type = i; env = _; sexpr = _} ->
-      {func_id = i; args = al; native = false}
+  | Native {args = _; func_type = t; func = _} -> t
+  | Runtime {args = _; func_type = t; env = _; sexpr = _} -> t
 
-let rec type_id_lookup: type_env -> string -> type_id option = fun e s ->
+let rec typ_lookup: type_env -> string -> typ option = fun e s ->
   match Hashtbl.find_opt e.variables s with
     | Some v -> Some v
     | None ->
       match e.outer with
-        | Some e' -> type_id_lookup e' s
+        | Some e' -> typ_lookup e' s
         | None -> None
 
 exception UnwrapNone
+
+type parse_error = 
+  | TypeError of {expected: typ; found: typ}
+  | LitError of {expected: typ; found: string}
+  | Malformed of string
+  | ParseError of {expected: string; explanation: string}
+  | UnknownIdentifier of string
 
 let unwrap x = match x with
   | Some x -> x
   | None -> raise UnwrapNone
 
-let rec type_from_id e i =
-  match Hashtbl.find_opt e.types i with
-    | Some t -> t
-    | None -> type_from_id (unwrap e.outer) i
-
-let type_lookup e s = 
-  match type_id_lookup e s with
-    | Some i -> Some (type_from_id e i)
-    | None -> None
-
-let type_check_seq = ()
-
-let type_of e v = match v with
+let rec type_check_seq:
+  type_env -> type_instance Seq.t -> (type_val, parse_error) result 
+  = fun e s ->
+  let type_seq = Seq.map (type_of e) s in
+  match Seq.uncons type_seq with
+    | None -> Ok (Generic_ Any)
+    | Some (Ok t, rest) ->
+      let rec aux (*: (type_val, parse_error) result -> (type_val, parse_error) result *)
+        = fun s -> match Seq.uncons s with
+        | None -> Ok t
+        | Some (Ok t', s') ->
+          if t' = t then
+            aux s'
+          else
+            Error (TypeError {expected = t; found = t'})
+        | Some (Error e, _) -> Error e in
+      aux rest
+    | Some (e, _) -> e
+and type_of e v = match v with
   | Null -> Ok Null_
   | Bool _ -> Ok Bool_
   | Int _ -> Ok Int_
