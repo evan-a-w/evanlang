@@ -140,7 +140,7 @@ let get_string_state_funcs: char -> stream_reader -> (((string -> lex_result)
     Some ((fun x -> NumberLit x), is_number, void)
   else if c = '"' then
     Some ((fun x -> StringLit x)
-          , (fun c -> c != '"')
+          , (fun c -> c <> '"')
           , (fun x -> try
                         let c = x#get_char in
                         if c = '"' then
@@ -175,7 +175,7 @@ let get_list_state_funcs: char -> stream_reader -> (((lex_result list -> lex_res
     Some ((fun x -> SexprLit x), ')', (fun _ -> ()))
   else if c = '\'' then
     let c = r#get_char in
-    if c != '(' then
+    if c <> '(' then
       (r#unget_char c;
        None)
     else Some ((fun x -> ListLit x), ')', comma_sep)

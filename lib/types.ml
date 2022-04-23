@@ -1,7 +1,7 @@
 open Result
 
 type typ =
-  | Null_
+  | Unit_
   | Bool_
   | Int_
   | Float_
@@ -19,15 +19,17 @@ type typ =
   | Generic_ of trait list
 and func_type = {
   func_id: int; (* id used to index into map *)
-  args: (string * typ) list; 
+  args: string list; 
+  typ: typ list;
   native: bool
 }
 and type_env = {
   outer: type_env option; 
+  mutable type_map: (int, typ) Hashtbl.t;
   mutable variables: (string, typ) Hashtbl.t;
   mutable functions: (int, func_type) Hashtbl.t;
   mutable traits: (string, trait) Hashtbl.t;
-  mutable trait_map: (int, string list) Hashtbl.t;
+  mutable traits_of_type_id: (int, string list) Hashtbl.t;
   next_type_id: int ref;
   next_func_id: int ref
 }
@@ -36,7 +38,7 @@ and sum_or_prod =
     | Sum of (string, typ) Hashtbl.t
     | Prod of (string, typ) Hashtbl.t
 and custom_type = sum_or_prod * int
-and trait = string * trait_elem
+and trait = string * (trait_elem list)
 and trait_elem =
   | Trait of trait
   | Field of {
@@ -45,9 +47,10 @@ and trait_elem =
     }
   | Method of {
       name: string;
-      fn: func_type
+      typ: typ list;
     }
 
+let any_type = Generic_ []
 
 (* For the interpreter, type checking should be done by the time this is used
  * so runtime type errors should never occur *)
@@ -80,10 +83,6 @@ and func =
         sexpr: type_instance array;
     }
 
-let ftype = function
-  | Native {args = _; func_type = t; func = _} -> t
-  | Runtime {args = _; func_type = t; env = _; sexpr = _} -> t
-
 let rec typ_lookup: type_env -> string -> typ option = fun e s ->
   match Hashtbl.find_opt e.variables s with
     | Some v -> Some v
@@ -104,6 +103,13 @@ type parse_error =
   | AbstractTypeError of {expected: string; found: typ}
   | FlippedATE of {found: string; expected: typ}
 
+let ftype f = let get = function
+  | Native {args = _; func_type = t; func = _} -> t
+  | Runtime {args = _; func_type = t; env = _; sexpr = _} -> t in
+  match get f with
+    | Func_ t -> Ok (Func_ t)
+    | o -> Error (AbstractTypeError {expected = "Function"; found = o})
+
 let get_custom = function
     | Custom_ (t, id) -> Ok (t, id)
     | t -> Error (AbstractTypeError {expected = "custom"; found = t})
@@ -111,10 +117,6 @@ let get_custom = function
 let unwrap x = match x with
   | Some x -> x
   | None -> raise UnwrapNone
-
-let func_type_list = function
-    | Func_ {args = a; func_id = _; native = _} -> List.map (fun (s, t) -> t) a |> ok
-    | t -> Error (AbstractTypeError {expected = "Function"; found = t})
 
 let all_but_last l =
   let rec inner acc = function
@@ -125,9 +127,13 @@ let all_but_last l =
     | [] -> Error (Malformed "Function defined with no type")
     | o -> Ok (inner [] o)
 
+let func_type_list = function
+    | Func_ {args = _; func_id = _; typ = t; native = _} -> all_but_last t
+    | t -> Error (AbstractTypeError {expected = "Function"; found = t})
+
 let get_type_id = function
   | Custom_ (_, id) -> id
-  | Null_ -> 0
+  | Unit_ -> 0
   | Bool_ -> 1
   | Int_ -> 2
   | Float_ -> 3
@@ -168,7 +174,7 @@ let rec type_check_seq:
       aux rest
     | Some (e, _) -> e
 and type_of e v = match v with
-  | Null -> Ok Null_
+  | Null -> Ok Unit_
   | Bool _ -> Ok Bool_
   | Int _ -> Ok Int_
   | Float _ -> Ok Float_
@@ -181,37 +187,44 @@ and type_of e v = match v with
     bind (type_check_seq e (Hashtbl.to_seq_values m)) (fun v ->
     Ok (Map_ (k, v)))
   | Sexpr l -> (match l with
-    | [] -> Ok Null_
+    | [] -> Ok Unit_
     | x :: xs -> 
       bind (type_of e x) (fun t -> 
-      bind (func_type_list t) (fun ft ->
+      bind (func_type_list t) (fun (first, last) ->
       bind (lift_opt (List.map (fun z -> type_of e z) xs)) (fun ts ->
-      bind (all_but_last ft) (fun (first, last) ->
       if ts = first then
         Ok last
       else
-        Error (TypeError {expected = Tuple_ first; found = Tuple_ ts}))))))
+        Error (TypeError {expected = Tuple_ first; found = Tuple_ ts})))))
   | Env _ -> Ok Env_
   | Custom (t, v) ->
     bind (get_custom t) (fun (t', id) ->
     match t' with
     | Sum st -> (match List.of_seq (Hashtbl.to_seq v) with
       | [(k, v)] ->
-        bind (Hashtbl.find_opt st k |>
-              Option.to_result
-                (Error (FlippedAte {
-                  expected = t';
+        bind (Option.to_result ~none:(FlippedATE {
+                  expected = Custom_ (t', id);
                   found = Printf.sprintf "Sum option %s" k
-        }))) (fun mt ->
-        bind (typeof e v) (fun vt ->
-        if vt = t' then
+        }) (Hashtbl.find_opt st k)) (fun mt ->
+        bind (type_of e v) (fun vt ->
+        if vt = mt then
           Ok (Custom_ (t', id))
         else
-          Error (TypeError {expected = t'; found = vt})))
+          Error (TypeError {expected = Custom_ (t', id); found = vt})))
       | _ -> Error (FlippedATE {expected = t; found = "Record struct"}))
     | Prod pt ->
-      bind (lift_opt (Seq.map (typeof e) (Hashtbl.to_seq_values v))) (fun ms ->
-      let mapped_v = Seq.zip (Seq.to_seq_keys v) ms in
-      let sm = Seq.sorted_merge String.compare mapped_v (Hashtbl.to_seq pt) in
-      )
-  | Func f -> Func_ (ftype f)
+      bind (Result.map List.to_seq
+                       (lift_opt (List.of_seq (Seq.map (type_of e) (Hashtbl.to_seq_values v)))))
+      (fun ms ->
+      let mapped_v = Seq.zip (Hashtbl.to_seq_keys v) ms in
+      let sort_thing thing = 
+        List.sort
+          (fun (s, _) (s', _ )-> String.compare s s')
+          (List.of_seq thing) in
+      let sorted_v = sort_thing mapped_v in
+      let sorted_pt = sort_thing (Hashtbl.to_seq pt) in
+      if sorted_v = sorted_pt then
+        Ok (Custom_ (t', id))
+      else
+        Error (FlippedATE {expected = Custom_ (t', id); found = "Wrong user struct"})))
+  | Func f -> ftype f

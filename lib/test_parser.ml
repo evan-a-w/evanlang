@@ -20,7 +20,7 @@ let parsed s =
   parse reader
 
 let assert_parse_eq s rhs = 
-  if parsed s != rhs then
+  if parsed s <> rhs then
 
     failwith "parse failed"
   else ()
