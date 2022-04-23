@@ -29,7 +29,7 @@ and type_env = {
   mutable variables: (string, typ) Hashtbl.t;
   mutable functions: (int, func_type) Hashtbl.t;
   mutable traits: (string, trait) Hashtbl.t;
-  mutable traits_of_type_id: (int, string list) Hashtbl.t;
+  mutable traits_of_type_id: (int, (string, bool) Hashset.t) Hashtbl.t;
   next_type_id: int ref;
   next_func_id: int ref
 }
@@ -41,7 +41,7 @@ and custom_type = sum_or_prod * int
 and trait = string * (trait_elem list)
 and trait_elem =
   | Trait of trait
-  | Field of {
+  | Member of {
       name: string;
       typ: typ
     }
@@ -103,6 +103,14 @@ type parse_error =
   | AbstractTypeError of {expected: string; found: typ}
   | FlippedATE of {found: string; expected: typ}
 
+let rec typ_lookup_res: type_env -> string -> (typ, parse_error) result = fun e s ->
+  match Hashtbl.find_opt e.variables s with
+    | Some v -> Ok v
+    | None ->
+      match e.outer with
+        | Some e' -> typ_lookup_res e' s
+        | None -> Error (UnknownIdentifier s)
+
 let ftype f = let get = function
   | Native {args = _; func_type = t; func = _} -> t
   | Runtime {args = _; func_type = t; env = _; sexpr = _} -> t in
@@ -155,6 +163,91 @@ let rec lift_opt = function
     let lifted = lift_opt xs in
     Result.map (fun y -> x' :: y) lifted)
 
+let get_type_id = function
+  | Custom_ (_, id) -> id
+  | Unit_ -> 0
+  | Bool_ -> 1
+  | Int_ -> 2
+  | Float_ -> 3
+  | String_ -> 4
+  | Array_ _ -> 5
+  | Symbol_ -> 6
+  | List_ _ -> 7
+  | Map_ _ -> 8
+  | t -> raise (NotTraitable t)
+
+let satisfies e t trait_list =
+  let satisfies_trait (s, _) =
+    Option.is_some (Option.map
+                     (fun m -> Hashtbl.find_opt m s)
+                     (Hashtbl.find_opt e.trait_map (get_type_id s))) in
+  List.for_all satisfies_trait trait_list
+
+let get_gen_trait e t = match t with
+  | Unit_
+  | Bool_
+  | Int_
+  | Float_
+  | String_
+  | Symbol_
+  | Sexpr_
+  | Env_
+  | Func_ _
+  | Custom_ _
+  | Func_ _
+  | Tuple_ _ -> Ok []
+  | 
+
+let concrete e a = match a with
+  | Unit_
+  | Bool_
+  | Int_
+  | Float_
+  | String_
+  | Symbol_
+  | Sexpr_
+  | Env_
+  | Func_ _
+  | Custom_ _
+  | Func_ _
+  | Tuple_ _ -> Ok true
+  | Array_ b -> concrete e b
+  | List_ b -> concrete e b
+  | Map_ b c -> (concrete e b) && (concrete e c)
+  | Identifier s = Result.map (concrete e) (typ_lookup e s)
+  | _ -> Ok false
+
+
+let most_specific_type e a b =
+  bind (concrete e a) (fun a_concrete ->
+    if a_concrete then
+      a
+    else
+      bind (concrete e b) (fun b_concrete ->
+        if b_concrete then
+          if 
+        else
+          let a_traits = get_gen_trait e a in
+
+let typ_compatible e a b = 
+  match a with
+  | Unit_
+  | Bool_
+  | Int_
+  | Float_
+  | String_
+  | Symbol_
+  | Sexpr_
+  | Env_
+  | Func_ _
+  | Custom_ _
+  | Tuple_ _ -> if a = b then Ok a
+  | Array_ at -> 
+  | List_ of typ
+  | Map_ of typ * typ
+  | Custom_ of custom_type
+  | Generic_ of trait list
+
 let rec type_check_seq:
   type_env -> type_instance Seq.t -> (typ, parse_error) result 
   = fun e s ->
@@ -192,7 +285,7 @@ and type_of e v = match v with
       bind (type_of e x) (fun t -> 
       bind (func_type_list t) (fun (first, last) ->
       bind (lift_opt (List.map (fun z -> type_of e z) xs)) (fun ts ->
-      if ts = first then
+      if ts %= first then
         Ok last
       else
         Error (TypeError {expected = Tuple_ first; found = Tuple_ ts})))))
@@ -207,23 +300,27 @@ and type_of e v = match v with
                   found = Printf.sprintf "Sum option %s" k
         }) (Hashtbl.find_opt st k)) (fun mt ->
         bind (type_of e v) (fun vt ->
-        if vt = mt then
+        if vt %= mt then
           Ok (Custom_ (t', id))
         else
           Error (TypeError {expected = Custom_ (t', id); found = vt})))
       | _ -> Error (FlippedATE {expected = t; found = "Record struct"}))
     | Prod pt ->
       bind (Result.map List.to_seq
-                       (lift_opt (List.of_seq (Seq.map (type_of e) (Hashtbl.to_seq_values v)))))
+                       (lift_opt
+                         (List.of_seq
+                            (Seq.map (type_of e) (Hashtbl.to_seq_values v)))))
       (fun ms ->
       let mapped_v = Seq.zip (Hashtbl.to_seq_keys v) ms in
       let sort_thing thing = 
         List.sort
           (fun (s, _) (s', _ )-> String.compare s s')
           (List.of_seq thing) in
-      let sorted_v = sort_thing mapped_v in
-      let sorted_pt = sort_thing (Hashtbl.to_seq pt) in
-      if sorted_v = sorted_pt then
+      let sorted_v = List.to_seq (sort_thing mapped_v) in
+      let sorted_pt = List.to_seq (sort_thing (Hashtbl.to_seq pt)) in
+      let two_eq ((s, t), (s', t')) = s = s' and t %= t' in
+      let joined = Seq.zip sorted_v sorted_pt in
+      if Seq.for_all two_eq joined then
         Ok (Custom_ (t', id))
       else
         Error (FlippedATE {expected = Custom_ (t', id); found = "Wrong user struct"})))
