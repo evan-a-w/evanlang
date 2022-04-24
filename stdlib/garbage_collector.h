@@ -2,13 +2,13 @@
 #define GARBABGE_COLLECTOR_H
 
 #define YOUNG_HEAP_SIZE 4096
-#define BYTES_TILL_MAJOR_GC 4096
+#define BYTES_TILL_MAJOR_GC 8192
 
 #include <stdint.h>
 #include <stdio.h>
 
 // Provided by the linked code
-extern void **roots;
+extern char ***roots;
 extern size_t roots_size;
 
 bool gc_init();
