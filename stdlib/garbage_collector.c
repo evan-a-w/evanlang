@@ -26,6 +26,8 @@ typedef struct gc_state {
     size_t old_heap_capacity;
 } gc_state_t;
 
+static void trace_roots(void);
+
 gc_state_t gc_state;
 
 bool gc_init() {

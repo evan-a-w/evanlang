@@ -7,6 +7,10 @@
 #include <stdint.h>
 #include <stdio.h>
 
+// Provided by the linked code
+extern void **roots;
+extern size_t roots_size;
+
 bool gc_init();
 
 // Returns a double pointer - dereference to get the address of the data
@@ -15,7 +19,5 @@ bool gc_init();
 void **galloc(size_t size, void (*trace)(void *), void (*finalize)(void *));
 
 void gc_destroy();
-
-void trace_roots();
 
 #endif
