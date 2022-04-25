@@ -27,10 +27,7 @@ let initial_func_map =
   Hashtbl.of_seq (Seq.zip (Seq.ints 0) (Hashtbl.to_seq_values initial_functions))
 
 let initial_type_env =
-  let get_type_id t =
-    let map = Hashtbl.create 10 in
-      match Hashtbl.find_opt map 
-  let type_env = {
+  {
     outer = None;
     variables = initial_functions;
     functions = initial_func_map;
