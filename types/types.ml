@@ -17,24 +17,26 @@ and concrete_type =
   | Int_
   | String_
   | Double_
-  | Array_ of concrete_type
-  | List_ of concrete_type
-  | Map_ of concrete_type * concrete_type
-  | Tuple_ of concrete_type list
-  | Func_ of concrete_type list
+  | Array_ of poly_type
+  | List_ of poly_type
+  | Map_ of poly_type * poly_type
+  | Tuple_ of poly_type list
+  | Func_ of poly_type list
   | Custom_ of sum_or_prod
 and sum_or_prod =
-  | Sum of (string, concrete_type) Hashtbl.t
-  | Product of (string, concrete_type) Hashtbl.t
+  | Sum of (string, poly_type) Hashtbl.t
+  | Product of (string, poly_type) Hashtbl.t
 and trait_map = (string, trait) Hashtbl.t
 and trait_members = (string, poly_type list) Hashtbl.t
 and concrete_trait_set = (concrete_type * StringSet.t) list
 and trait_struct = {
-  map: trait_map;
-  members: trait_members;
-  concrete_set: concrete_trait_set;
+  mutable map: trait_map;
+  mutable members: trait_members;
+  mutable concrete_set: concrete_trait_set;
   (* For every trait, there is a list of list of traits that are implemented automatically *)
-  auto_impls: (string * (StringSet.t list)) list;
+  mutable auto_impls: (string * (StringSet.t list)) list;
+  (* Will also have type -> conditions on member types -> traits *)
+  (* Probably implemented as associative list with type, check equivalence and then get the auot doobs *)
 }
 
 let get_traits_of_trait_set trait_st trait_set =
