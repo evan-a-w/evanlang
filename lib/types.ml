@@ -184,7 +184,6 @@ let satisfies e t trait_list =
   List.for_all satisfies_trait trait_list
 
 let get_gen_trait e t = match t with
-  | Unit_
   | Bool_
   | Int_
   | Float_
@@ -196,7 +195,7 @@ let get_gen_trait e t = match t with
   | Custom_ _
   | Func_ _
   | Tuple_ _ -> Ok []
-  | 
+  | _ -> raise (NotTraitable t)
 
 let concrete e a = match a with
   | Unit_

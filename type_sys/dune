@@ -1,2 +1,5 @@
 (library
- (name type_sys))
+ (name type_sys)
+ (libraries base)
+ (inline_tests)
+ (preprocess (pps ppx_inline_test)))

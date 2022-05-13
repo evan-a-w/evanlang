@@ -25,7 +25,9 @@ let void _ = ()
 
 let rec get_traits : type_state -> typ -> TraitSet.t = fun ts t ->
   let update_traits ts trait_set opt_name (trait, t) =
-    (if type_subset_info'd ts trait_set opt_name t
+    let nt = get_name t in
+    (if (Option.is_none nt || nt = opt_name)
+        && type_subset_info'd ts trait_set opt_name t
      then TraitSet.add trait trait_set else trait_set) in
   let rec increment_trait_set : type_state -> TraitSet.t -> string option -> TraitSet.t
     = fun ts tl opt_name ->
@@ -70,3 +72,7 @@ let add_type : type_state -> (string * typ) -> type_state = fun ts (name, t) ->
 let add_trait : type_state -> (trait * trait_t) -> type_state
   = fun ts (name, els) ->
   { ts with trait_map = StringMap.add name els ts.trait_map }
+
+let add_impl : type_state -> (trait * typ) -> type_state
+  = fun ts (name, t) ->
+  { ts with trait_impls = (name, t) :: ts.trait_impls }
