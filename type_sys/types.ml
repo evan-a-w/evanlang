@@ -23,19 +23,20 @@ and type_state = {
 
 let void _ = ()
 
-let rec get_traits : type_state -> typ -> TraitSet.t = fun ts t ->
-  let update_traits ts trait_set opt_name (trait, t) =
-    let nt = get_name t in
-    (if (Option.is_none nt || nt = opt_name)
-        && type_subset_info'd ts trait_set opt_name t
+let rec get_traits : type_state -> typ -> TraitSet.t = fun ts get_type ->
+  let update_traits ts trait_set orig_t opt_name (trait, t) =
+    (if t = orig_t || match t with
+          | Generic_ bs -> TraitSet.subset bs trait_set
+          | Function_ _ -> t = orig_t
+          | Concrete_ _ -> type_superset_with_info ts trait_set opt_name t
      then TraitSet.add trait trait_set else trait_set) in
-  let rec increment_trait_set : type_state -> TraitSet.t -> string option -> TraitSet.t
-    = fun ts tl opt_name ->
-    let f trait_set trait_entry = update_traits ts trait_set opt_name trait_entry in
+  let rec increment_trait_set : type_state -> TraitSet.t -> typ -> string option -> TraitSet.t
+    = fun ts tl orig_t opt_name ->
+    let f trait_set trait_entry = update_traits ts trait_set orig_t opt_name trait_entry in
     List.fold_left f tl ts.trait_impls
-  and finalise_trait_set : type_state -> TraitSet.t -> string option -> TraitSet.t
-    = fun ts tl opt_name ->
-    let next = increment_trait_set ts tl opt_name in
+  and finalise_trait_set : type_state -> TraitSet.t -> typ -> string option -> TraitSet.t
+    = fun ts tl orig_t opt_name ->
+    let next = increment_trait_set ts tl orig_t opt_name in
     if next = tl
     then
       (Option.map
@@ -43,25 +44,31 @@ let rec get_traits : type_state -> typ -> TraitSet.t = fun ts t ->
          opt_name
        |> void;
       next)
-    else finalise_trait_set ts next opt_name in
-  match t with
+    else finalise_trait_set ts next orig_t opt_name in
+  match get_type with
   | Function_ _ -> TraitSet.empty
-  | Generic_ l -> finalise_trait_set ts l None
+  | Generic_ l -> finalise_trait_set ts l get_type None
   | Concrete_ ct ->
-    let init_set = Option.value
-                     ~default:(TraitSet.empty)
-                     (StringMap.find_opt ct.type_name ts.type's_traits) in
-    finalise_trait_set ts init_set (Some ct.type_name)
+    let init_set = get_traits_weak ts get_type in
+    finalise_trait_set ts init_set get_type (Some ct.type_name)
+and get_traits_weak ts t = match t with
+  | Generic_ l -> l
+  | Function_ _ -> TraitSet.empty
+  | Concrete_ ct -> Option.value
+                      ~default:(TraitSet.empty)
+                      (StringMap.find_opt ct.type_name ts.type's_traits)
 and get_name = function
   | Generic_ _ | Function_ _ -> None
-  | Concrete_ { type_name; type_params = _ } -> Some type_name
-and type_subset_info'd ts trait_set opt_name b =
-  let bs = get_traits ts b in
-  get_name b = opt_name && TraitSet.subset trait_set bs
+  | Concrete_ { type_name; _ } -> Some type_name
+and type_superset_with_info ts trait_set opt_name b =
+  let bname = get_name b in
+  (Option.is_none bname || bname = opt_name) &&
+    let bs = get_traits ts b in
+    TraitSet.subset bs trait_set
 and type_subset ts a b = 
   a = b ||
-    let ta = get_traits ts a and na = get_name a in
-    type_subset_info'd ts ta na b
+    let tb = get_traits ts b and nb = get_name b in
+    type_superset_with_info ts tb nb a
 
 let add_type : type_state -> (string * typ) -> type_state = fun ts (name, t) ->
   let inserted = match t with

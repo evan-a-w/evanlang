@@ -54,3 +54,25 @@ let test_state = traits_with_eq_int_impl
 let%test "int_eq" = 
   TraitSet.equal (get_traits test_state (Concrete_ int_type))
                  (TraitSet.of_seq (Stdlib.List.to_seq ["Eq"]))
+
+let%test "list_eq" = 
+  TraitSet.equal (get_traits test_state eq_list)
+                 (TraitSet.of_seq (Stdlib.List.to_seq ["Eq"]))
+
+let%test "useless_impl" =
+  let useless_trait = add_trait test_state ("Useless", []) in
+  let new_test_state = add_impl useless_trait ("Useless", Generic_ (TraitSet.of_list ["Eq"])) in
+  TraitSet.equal (get_traits new_test_state eq_list)
+                 (TraitSet.of_seq (Stdlib.List.to_seq ["Eq"; "Useless"]))
+
+let%test "list_list_eq" = 
+  let eq_list_list = 
+    construct_type "List"
+                   (StringMap.of_seq (Stdlib.List.to_seq [("a", eq_list)])) in
+  TraitSet.equal (get_traits test_state (Concrete_ eq_list_list))
+                 (TraitSet.of_seq (Stdlib.List.to_seq ["Eq"]))
+
+let%test "list_any" = 
+  let list_any_traits = get_traits test_state (Concrete_ list_type) in
+  TraitSet.equal list_any_traits
+                 (TraitSet.of_seq (Stdlib.List.to_seq []))
