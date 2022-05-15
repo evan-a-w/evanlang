@@ -4,7 +4,7 @@ let empty_type_state = {
   trait_impls = [];
   trait_map = StringMap.empty;
   type_map = StringMap.empty;
-  type's_traits = StringMap.empty;
+  type's_traits = [];
 }
 
 let construct_type type_name type_params = { type_name; type_params }

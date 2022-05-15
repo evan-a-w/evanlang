@@ -16,33 +16,72 @@ and trait_elem =
   | Type of string
 and type_state = {
     trait_impls : (trait * typ) list;
-    mutable type's_traits : TraitSet.t StringMap.t;
+    mutable type's_traits : (typ * TraitSet.t) list;
     type_map : typ StringMap.t;
     trait_map : trait_t StringMap.t;
   }
 
 let void _ = ()
+let id x = x
+
+let sequence_to_string ?(join_by = ", ") ~to_string seq =
+  let open Base.Sequence in
+  String.concat join_by (map seq ~f:to_string |> to_list)
+
+let seq_to_string ?(join_by = ", ") seq ~to_string =
+  String.concat join_by (Seq.map to_string seq |> Stdlib.List.of_seq)
+
+let rec type_to_string = function
+  | Function_ typ_list ->
+    let typ_seq = Base.Sequence.of_list typ_list in
+    sequence_to_string typ_seq ~join_by:" -> " ~to_string:type_to_string
+  | Generic_ l ->
+    let trait_seq = TraitSet.to_seq l in
+    let trait_string = seq_to_string trait_seq ~to_string:id in
+    Printf.sprintf "[%s]" trait_string
+  | Concrete_ t ->
+    let f (s, t2) = Printf.sprintf "%s: %s" s (type_to_string t2) in
+    let type_map_string = seq_to_string ~to_string:f (StringMap.to_seq t.type_params) in
+    if type_map_string = "" then
+      Printf.sprintf "%s" t.type_name
+    else
+      Printf.sprintf "%s with {%s}" t.type_name type_map_string
+
+let print_type t = Printf.printf "%s\n" (type_to_string t)
+
+let print_impls type_state =
+  let f (s, t) = Printf.sprintf "%s for %s" s (type_to_string t) in
+  let sequence = Base.Sequence.of_list type_state.trait_impls in
+  let seq_string = sequence_to_string sequence ~to_string:f in
+  Printf.printf "[%s]\n" seq_string
+
+let print_trait_set ts =
+  let tstring = seq_to_string (TraitSet.to_seq ts) ~to_string:id in
+  Stdlib.Printf.printf "[%s]\n" tstring
+
+let rec update_assoc_list l k v = match l with
+  | [] -> [(k, v)]
+  | (xk, xv)::xs -> if xk = k then (k, v) :: xs else (xk, xv) :: update_assoc_list xs k v
+
 
 let rec get_traits : type_state -> typ -> TraitSet.t = fun ts get_type ->
-  let update_traits ts trait_set orig_t opt_name (trait, t) =
-    (if t = orig_t || match t with
-          | Generic_ bs -> TraitSet.subset bs trait_set
-          | Function_ _ -> t = orig_t
-          | Concrete_ _ -> type_superset_with_info ts trait_set opt_name t
+  let update_traits ts trait_set orig_t (trait, t) =
+    (*Printf.printf "[%s] with name %s\nvs\n"
+      (seq_to_string (TraitSet.to_seq trait_set) ~to_string:id)
+      (Option.value ~default:"None" opt_name);
+    print_type t;*)
+    (if type_satisfies_super ~a_traits:trait_set ts orig_t t
      then TraitSet.add trait trait_set else trait_set) in
-  let rec increment_trait_set : type_state -> TraitSet.t -> typ -> string option -> TraitSet.t
-    = fun ts tl orig_t opt_name ->
-    let f trait_set trait_entry = update_traits ts trait_set orig_t opt_name trait_entry in
+  let rec increment_trait_set : type_state -> TraitSet.t -> typ -> TraitSet.t
+    = fun ts tl orig_t ->
+    let f trait_set trait_entry = update_traits ts trait_set orig_t trait_entry in
     List.fold_left f tl ts.trait_impls
   and finalise_trait_set : type_state -> TraitSet.t -> typ -> string option -> TraitSet.t
     = fun ts tl orig_t opt_name ->
-    let next = increment_trait_set ts tl orig_t opt_name in
+    let next = increment_trait_set ts tl orig_t in
     if next = tl
     then
-      (Option.map
-         (fun n -> ts.type's_traits <- StringMap.add n next ts.type's_traits)
-         opt_name
-       |> void;
+      (ts.type's_traits <- update_assoc_list ts.type's_traits orig_t next;
       next)
     else finalise_trait_set ts next orig_t opt_name in
   match get_type with
@@ -51,24 +90,30 @@ let rec get_traits : type_state -> typ -> TraitSet.t = fun ts get_type ->
   | Concrete_ ct ->
     let init_set = get_traits_weak ts get_type in
     finalise_trait_set ts init_set get_type (Some ct.type_name)
-and get_traits_weak ts t = match t with
+and get_traits_weak ts t = let def = match t with
   | Generic_ l -> l
   | Function_ _ -> TraitSet.empty
-  | Concrete_ ct -> Option.value
-                      ~default:(TraitSet.empty)
-                      (StringMap.find_opt ct.type_name ts.type's_traits)
+  | Concrete_ _ -> TraitSet.empty in
+  Option.value ~default:(def) (List.assoc_opt t ts.type's_traits)
+and get_traits_conc ts t = match t with
+  | Generic_ l -> l
+  | Function_ _ -> TraitSet.empty
+  | Concrete_ _ -> get_traits ts t
 and get_name = function
   | Generic_ _ | Function_ _ -> None
   | Concrete_ { type_name; _ } -> Some type_name
-and type_superset_with_info ts trait_set opt_name b =
-  let bname = get_name b in
-  (Option.is_none bname || bname = opt_name) &&
-    let bs = get_traits ts b in
-    TraitSet.subset bs trait_set
-and type_subset ts a b = 
+and type_satisfies_super ?a_traits ts a b = 
   a = b ||
-    let tb = get_traits ts b and nb = get_name b in
-    type_superset_with_info ts tb nb a
+  let ta = Option.value ~default:(get_traits_conc ts a) a_traits in
+  match a, b with
+    | (Function_ la, Function_ lb) -> la = lb
+    | (Function_ _, _) -> false
+    | (_, Generic_ tb) -> TraitSet.subset tb ta
+    | (Generic_ _, _) -> false
+    | (Concrete_ ca, Concrete_ cb) ->
+      ca.type_name = cb.type_name &&
+      StringMap.equal (type_satisfies_super ts) ca.type_params cb.type_params
+    | (Concrete_ _, Function_ _) -> false
 
 let add_type : type_state -> (string * typ) -> type_state = fun ts (name, t) ->
   let inserted = match t with

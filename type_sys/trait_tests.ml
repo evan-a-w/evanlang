@@ -72,6 +72,11 @@ let%test "list_list_eq" =
   TraitSet.equal (get_traits test_state (Concrete_ eq_list_list))
                  (TraitSet.of_seq (Stdlib.List.to_seq ["Eq"]))
 
+let%test "any" = 
+  let any_traits = get_traits test_state any_type in
+  TraitSet.equal any_traits
+                 (TraitSet.of_seq (Stdlib.List.to_seq []))
+
 let%test "list_any" = 
   let list_any_traits = get_traits test_state (Concrete_ list_type) in
   TraitSet.equal list_any_traits
