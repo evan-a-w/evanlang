@@ -21,7 +21,6 @@ and type_state = {
     trait_map : trait_t StringMap.t;
   }
 
-let void _ = ()
 let id x = x
 
 let sequence_to_string ?(join_by = ", ") ~to_string seq =
@@ -84,27 +83,18 @@ let rec get_traits : type_state -> typ -> TraitSet.t = fun ts get_type ->
       (ts.type's_traits <- update_assoc_list ts.type's_traits orig_t next;
       next)
     else finalise_trait_set ts next orig_t opt_name in
-  match get_type with
-  | Function_ _ -> TraitSet.empty
-  | Generic_ l -> finalise_trait_set ts l get_type None
-  | Concrete_ ct ->
-    let init_set = get_traits_weak ts get_type in
-    finalise_trait_set ts init_set get_type (Some ct.type_name)
-and get_traits_weak ts t = let def = match t with
-  | Generic_ l -> l
-  | Function_ _ -> TraitSet.empty
-  | Concrete_ _ -> TraitSet.empty in
-  Option.value ~default:(def) (List.assoc_opt t ts.type's_traits)
-and get_traits_conc ts t = match t with
-  | Generic_ l -> l
-  | Function_ _ -> TraitSet.empty
-  | Concrete_ _ -> get_traits ts t
+  match List.assoc_opt get_type ts.type's_traits with
+  | Some x -> x
+  | None -> match get_type with
+      | Function_ _ -> TraitSet.empty
+      | Generic_ l -> finalise_trait_set ts l get_type None
+      | Concrete_ ct -> finalise_trait_set ts TraitSet.empty get_type (Some ct.type_name)
 and get_name = function
   | Generic_ _ | Function_ _ -> None
   | Concrete_ { type_name; _ } -> Some type_name
 and type_satisfies_super ?a_traits ts a b = 
   a = b ||
-  let ta = Option.value ~default:(get_traits_conc ts a) a_traits in
+  let ta = match a_traits with None -> get_traits ts a | Some x -> x in
   match a, b with
     | (Function_ la, Function_ lb) -> la = lb
     | (Function_ _, _) -> false
@@ -123,8 +113,10 @@ let add_type : type_state -> (string * typ) -> type_state = fun ts (name, t) ->
 
 let add_trait : type_state -> (trait * trait_t) -> type_state
   = fun ts (name, els) ->
-  { ts with trait_map = StringMap.add name els ts.trait_map }
+  { ts with trait_map = StringMap.add name els ts.trait_map;
+            type's_traits = [] }
 
 let add_impl : type_state -> (trait * typ) -> type_state
   = fun ts (name, t) ->
-  { ts with trait_impls = (name, t) :: ts.trait_impls }
+  { ts with trait_impls = (name, t) :: ts.trait_impls;
+            type's_traits = [] }
