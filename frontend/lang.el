@@ -1,1 +1,3 @@
-type <type_name> = <type_identifier> | PRODUCT_TYPE 
+(type <variable> <type>) ** MUST APPEAR WHEN DEFINED (eg. in function signature, let expr)
+(deftype (<type_params>) <name> { <field> : <type>, ... })
+(deftype (<type_params>) <name> (<variant of <type> , ...))
