@@ -1,9 +1,5 @@
-(menhir
-  (modules parser))
-
-(ocamllex lexer)
-
 (library
  (name frontend)
- (modules parser json lexer)
- (libraries base core))
+ (libraries base angstrom core)
+ (inline_tests)
+ (preprocess (pps ppx_inline_test)))
