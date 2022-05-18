@@ -27,3 +27,9 @@ let%test "float_succ" =
       fprintf stderr "%f" f;
       false
     )
+
+let%test "string_succ" =
+  let parsed = parse_string ~consume:All string_p "\"hello\\\"\"" in
+  match parsed with
+  | Ok "hello\"" -> true
+  | _ -> false
