@@ -51,7 +51,9 @@ let is_identifier c = let code = Char.code and cc = Char.code c in
   || c = '&' || c = '*' || c = '+' || c = '-' || c = '/' || c = ':' || c = '<'
   || c = '=' || c = '>' || c = '^' || c = '|' || c = '~'
 
-let identifier_p = take_while1 is_identifier
+let identifier_p = take_while1 is_identifier >>= function
+  | "->" -> fail "-> is reserved"
+  | o -> return o
 
 let symbol_p = char '\'' *> identifier_p
 
@@ -84,14 +86,17 @@ let trait_spec_p = let open Angstrom.Let_syntax in
   ws *> char '(' *> ws *> string "where" *> ws1 *>
   sep_by ws1 one >>= fun res -> ws *> char ')' *> return res
 
-let type_expr_p =
-  let rec aux = function
-    | [] -> raise Lazy.Undefined
-    | [x] -> ([], x)
-    | x :: xs ->
-      let (first, last) = aux xs in
-      (x :: first, last) in
-  aux <$> sep_by1 ws1 identifier_p
+(* TODO: broken - need to take one if can (no arrow following) otherwise not *)
+let type_expr_p : type_expr Angstrom.t = fix (fun f ->
+  let one =
+    let rec aux = function
+      | [] -> (* unreachable *) raise Lazy.Undefined
+      | [x] -> ([], x)
+      | x :: xs ->
+        let (first, last) = aux xs in
+        (x :: first, last) in
+    (fun x -> `Single (aux x)) <$> sep_by1 ws1 identifier_p in
+  ((fun x -> `Multi x) <$> sep_by1 (ws1 *> string "->" *> ws1) f) <|> one)
 
 let sum_type_p = let open Angstrom.Let_syntax in
   let one =
@@ -106,7 +111,7 @@ let prod_type_p =
 
 let deftype_expr = let open Angstrom.Let_syntax in
   let name_thing =
-    (fun x -> [], x) <$> identifier_p
+    (fun x -> `Single ([], x)) <$> identifier_p
     <|> (char '(' *> ws *> type_expr_p <* ws <* char ')') in
   let sum_thing = (fun x -> `Sum x) <$> sum_type_p in
   let prod_thing = (fun x -> `Prod x) <$> prod_type_p in
@@ -136,20 +141,16 @@ let array_p exp_p = let open Angstrom.Let_syntax in
   let%bind l = sep_by ws1 exp_p in
   ws *> char ']' *> return (`ArrayLit (Array.of_list l))
 
-let exp_p : exp Angstrom.t =
-  let first = ref (return `Unit) in
-  let inner f =
-    unit_p *> return `Unit
-    <|> ((fun b -> `Bool b) <$> bool_p)
-    <|> ((fun f -> `FloatLit f) <$> float_p)
-    <|> ((fun i -> `IntLit i) <$> int_p)
-    <|> ((fun s -> `StringLit s) <$> string_p)
-    <|> var_decl_p
-    <|> list_p !f
-    <|> array_p !f
-    <|> call_p !f
-    <|> ((fun s -> `Identifier s) <$> identifier_p)
-    <|> ((fun s -> `SymbolLit s) <$> symbol_p)
-    <|> deftype_expr in
-  first := inner first;
-  inner first
+let exp_p : exp Angstrom.t = fix (fun f ->
+  unit_p *> return `Unit
+  <|> ((fun b -> `Bool b) <$> bool_p)
+  <|> ((fun f -> `FloatLit f) <$> float_p)
+  <|> ((fun i -> `IntLit i) <$> int_p)
+  <|> ((fun s -> `StringLit s) <$> string_p)
+  <|> var_decl_p
+  <|> list_p f
+  <|> array_p f
+  <|> call_p f
+  <|> ((fun s -> `Identifier s) <$> identifier_p)
+  <|> ((fun s -> `SymbolLit s) <$> symbol_p)
+  <|> deftype_expr)

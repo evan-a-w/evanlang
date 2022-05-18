@@ -61,12 +61,28 @@ let%test "type_expr_succ" =
     parse_string ~consume:Prefix type_expr_p
                  "ning lol x" in
   match parsed with
-  | Ok (["ning"; "lol"], "x") -> true
-  | Ok (l, i) -> (
-      List.map ~f:(fun x -> print_string x; print_string " | ") l |> ignore;
-      Stdlib.Printf.printf "\n%s" i;
-      false
-    )
+  | Ok (`Single (["ning"; "lol"], "x")) -> true
+  | _ -> false
+
+let%test "reserved_id" = 
+  let parsed =
+    parse_string ~consume:Prefix identifier_p
+                 "->" in
+  match parsed with
+  | Error _ -> true
+  | _ -> false
+
+let%test "type_expr_multi" =
+  let parsed : (Types.type_expr, string) result =
+    parse_string ~consume:Prefix type_expr_p
+                 "ning lol x -> bing bong tex -> zeit" in
+  match parsed with
+  | Ok (`Multi
+    [ `Single (["ning"; "lol"], "x")
+    ; `Single (["bing"; "bong"], "tex")
+    ; `Single ([], "zeit")
+    ]) -> true
+  | Ok l -> Types.print_type_expr_types l; false
   | _ -> false
 
 let%test "sum_type_succ" =
@@ -74,7 +90,7 @@ let%test "sum_type_succ" =
     parse_string ~consume:Prefix sum_type_p
                  " (Some of x, None ) " in
   match parsed with
-  | Ok [("Some", Some ([], "x")); ("None", None)] -> true
+  | Ok [("Some", Some (`Single ([], "x"))); ("None", None)] -> true
   | _ -> false
 
 let%test "prod_type_succ" =
@@ -82,7 +98,7 @@ let%test "prod_type_succ" =
     parse_string ~consume:Prefix prod_type_p
                  " {Some of x, None of a b c } " in
   match parsed with
-  | Ok [("Some", ([], "x")); ("None", (["a"; "b"], "c"))] -> true
+  | Ok [("Some", `Single ([], "x")); ("None", `Single (["a"; "b"], "c"))] -> true
   | _ -> false
 
 let%test "var_decl_succ" =
@@ -90,7 +106,7 @@ let%test "var_decl_succ" =
     parse_string ~consume:Prefix exp_p
                  "( yo of  a b c )" in
   match parsed with
-  | Ok (`VarDecl ("yo", Some (["a"; "b"], "c"))) -> true
+  | Ok (`VarDecl ("yo", Some (`Single (["a"; "b"], "c")))) -> true
   | _ -> false
 
 let%test "deftype_sum_all" =
@@ -100,9 +116,9 @@ let%test "deftype_sum_all" =
                (where (a is [Eq]) (b is [Ord, Show]))
         (Some of x, None )
      )" in
-  let texpr = (["a"; "b"], "c") in
+  let texpr = `Single (["a"; "b"], "c") in
   let whereexpr = ["a", ["Eq"]; "b", ["Ord"; "Show"]] in
-  let sumexpr = [("Some", Some ([], "x")); ("None", None)] in
+  let sumexpr = [("Some", Some (`Single ([], "x"))); ("None", None)] in
   let open Stdlib in
   match parsed with
   | Ok (`DefType (a, b, c)) when (a = texpr && b = whereexpr && c = `Sum sumexpr) -> true
@@ -114,9 +130,9 @@ let%test "deftype_sum_not_all" =
     "( deftype (a b c)
         (Some of x, None )
      )" in
-  let texpr = (["a"; "b"], "c") in
+  let texpr = `Single (["a"; "b"], "c") in
   let whereexpr = [] in
-  let sumexpr = [("Some", Some ([], "x")); ("None", None)] in
+  let sumexpr = [("Some", Some (`Single ([], "x"))); ("None", None)] in
   let open Stdlib in
   match parsed with
   | Ok (`DefType (a, b, c)) when (a = texpr && b = whereexpr && c = `Sum sumexpr) -> true
@@ -128,9 +144,9 @@ let%test "deftype_prod_not_all" =
     "( deftype (a b c)
         {Some of x, None of a b s}
      )" in
-  let texpr = (["a"; "b"], "c") in
+  let texpr = `Single (["a"; "b"], "c") in
   let whereexpr = [] in
-  let prodexpr = [("Some", ([], "x")); ("None", (["a"; "b"], "s"))] in
+  let prodexpr = [("Some", `Single ([], "x")); ("None", `Single (["a"; "b"], "s"))] in
   let open Stdlib in
   match parsed with
   | Ok (`DefType (a, b, c)) when (a = texpr && b = whereexpr && c = `Prod prodexpr) -> true
@@ -143,9 +159,9 @@ let%test "deftype_prod_all" =
                (where (a is [Eq]) (b is [Ord, Show]))
         {Some of x, None of a b s}
      )" in
-  let texpr = (["a"; "b"], "c") in
+  let texpr = `Single (["a"; "b"], "c") in
   let whereexpr = ["a", ["Eq"]; "b", ["Ord"; "Show"]] in
-  let prodexpr = [("Some", ([], "x")); ("None", (["a"; "b"], "s"))] in
+  let prodexpr = [("Some", `Single ([], "x")); ("None", `Single (["a"; "b"], "s"))] in
   let open Stdlib in
   match parsed with
   | Ok (`DefType (a, b, c)) when (a = texpr && b = whereexpr && c = `Prod prodexpr) -> true
@@ -173,4 +189,12 @@ let%test "array_p" =
     parse_string ~consume:Prefix exp_p "[+ 1 2]" in
   match parsed with
   | Ok (`ArrayLit [|`Identifier "+"; `IntLit 1; `IntLit 2|]) -> true
+  | _ -> false
+
+let%test "list_p_inner" = let open Stdlib in
+  let parsed =
+    parse_string ~consume:Prefix exp_p "'(1 \"hi\" '(+ 1 2))" in
+  let first_list = `ListLit [`Identifier "+"; `IntLit 1; `IntLit 2] in
+  match parsed with
+  | Ok (`ListLit [`IntLit 1; `StringLit "hi"; l]) when l = first_list -> true
   | _ -> false

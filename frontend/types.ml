@@ -14,8 +14,17 @@ type exp =
 and type_lit =
   [ `Sum of (string * (type_expr option)) list
   | `Prod of (string * type_expr) list ]
-and type_expr = (string list) * string
+and type_expr = 
+  [ `Single of (string list) * string
+  | `Multi of type_expr list]
 and trait_spec = (string * (string list)) list
+
+let rec print_type_expr_types : type_expr -> unit = function
+  | `Single _ -> print_string "single "
+  | `Multi x ->
+    print_string "[";
+    List.map print_type_expr_types x |> ignore;
+    print_string "]"
 
 let string_of_type = function
   | `Unit -> "Unit"
