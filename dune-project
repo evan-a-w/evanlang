@@ -1,6 +1,6 @@
 (lang dune 3.0)
 
-(name schoml)
+(name evanlang)
 
 (generate_opam_files true)
 
@@ -16,8 +16,8 @@
 (documentation https://url/to/documentation)
 
 (package
- (name schoml)
- (synopsis "A short synopsis")
+ (name evanlang)
+ (synopsis "Terrible language")
  (description "A longer description")
  (depends ocaml dune base)
  (tags

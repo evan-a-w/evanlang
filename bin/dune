@@ -1,4 +1,4 @@
 (executable
- (public_name schoml)
+ (public_name evanlang)
  (name main)
  (libraries ))
