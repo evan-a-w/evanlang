@@ -67,6 +67,10 @@ let ws1 = skip_whitespace1
 
 let comma_sep = ws *> char ',' *> ws
 
+let delimitedws a b p = ws *> char a *> ws *> p <* ws <* char b <* ws
+
+let delimitedwsparen : 'a Angstrom.t -> 'a Angstrom.t = delimitedws '(' ')'
+
 let call_p exp_p =
   (fun x -> `Call x)
   <$> ws *> char '(' *> ws *> both (exp_p <* ws) (sep_by ws1 exp_p) <* ws <* char ')'
@@ -95,21 +99,37 @@ let type_expr_p : type_expr Angstrom.t = fix (fun f ->
       | x :: xs ->
         let (first, last) = aux xs in
         (x :: first, last) in
-    (fun x -> `Single (aux x)) <$> many (ws *> identifier_p <* ws) in
-  ((fun x -> `Multi x) <$> sep_by1 (ws1 *> string "->" *> ws1)
-            (one <|> (char '(' *> ws *> f <* ws <* char ')')))
-  <|> one)
+    (fun x -> `Single (aux x)) <$> many1 (ws *> identifier_p <* ws) in
+  let make_multi : type_expr list -> type_expr = function
+    | [] -> (* unreachable *) raise Lazy.Undefined
+    | [x] -> x
+    | l -> `Multi l in
+  make_multi
+    <$> (sep_by1 (ws *> string "->" *> ws)
+                 (one <|> (char '(' *> ws *> f <* ws <* char ')'))))
+
+let typed_p : exp Angstrom.t -> (type_expr * exp) Angstrom.t = fun exp_p ->
+    let paren_type_expr_p = delimitedwsparen type_expr_p in
+    let ws_exp_p = ws *> exp_p in
+    let get_typed = string "typed" *> ws in
+    let inner : (type_expr * exp) Angstrom.t
+      = get_typed *> both paren_type_expr_p ws_exp_p in
+    delimitedws '(' ')' inner
+
+let typed_exp_p exp_p =
+    let to_map x = `Typed x in
+    to_map <$> typed_p exp_p
 
 let sum_type_p = let open Angstrom.Let_syntax in
   let one =
     let%bind id = identifier_p in
     let next = ws1 *> string "of" *> ws1 *> type_expr_p >>= fun x -> return (id, Some x) in
     option (id, None) next in
-  ws *> char '(' *> sep_by comma_sep one <* ws <* char ')'
+  ws *> char '(' *> ws *> sep_by comma_sep one <* ws <* char ')'
 
 let prod_type_p =
   let one = both identifier_p (ws *> string "of" *> ws *> type_expr_p) in
-  ws *> char '{' *> sep_by comma_sep one <* ws <* char '}'
+  ws *> char '{' *> ws *> sep_by comma_sep one <* ws <* char '}'
 
 let deftype_expr = let open Angstrom.Let_syntax in
   let name_thing =
@@ -143,8 +163,18 @@ let exp_p : exp Angstrom.t = fix (fun f ->
   <|> ((fun i -> `IntLit i) <$> int_p)
   <|> ((fun s -> `StringLit s) <$> string_p)
   <|> ((fun s -> `SymbolLit s) <$> symbol_p)
-  <|> deftype_expr
   <|> list_p f
   <|> array_p f
+  <|> typed_exp_p f
   <|> call_p f
+  <|> deftype_expr
   <|> ((fun s -> `Identifier s) <$> identifier_p))
+
+let run_exp_p = parse_string ~consume:Prefix exp_p
+let run_exp_p_all = parse_string ~consume:All exp_p
+
+let prog_p = sep_by ws1 (ws *> exp_p)
+let prog_p1 = sep_by1 ws1 (ws *> exp_p)
+
+let run_prog_p = parse_string ~consume:All prog_p
+let prefix_run_prog_p = parse_string ~consume:Prefix prog_p

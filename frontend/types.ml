@@ -9,11 +9,14 @@ type exp =
   | `ListLit of exp list
   | `ArrayLit of exp array
   | `Call of exp * (exp list)
-  | `Typed of type_expr * exp
-  | `DefType of type_expr * trait_spec * type_lit ]
+  | `DefType of type_expr * trait_spec * type_lit
+  | `Typed of type_expr * exp ]
+  (* TODO: def trait needs to be done *)
+  (* TODO: let expr and function *)
 and type_lit =
   [ `Sum of (string * (type_expr option)) list
   | `Prod of (string * type_expr) list ]
+(* TODO: add tuple support *)
 and type_expr =
   [ `Single of (string list) * string
   | `Multi of type_expr list ]
@@ -31,6 +34,7 @@ let string_of_type = function
   | `ArrayLit _ -> "Array"
   | `VarDecl _ -> "VarDecl"
   | `Call _ -> "Call"
+  | `Typed _ -> "Typed"
   | `DefType _ -> "DefType"
 
 let print_type t = Printf.printf "%s\n" (string_of_type t)

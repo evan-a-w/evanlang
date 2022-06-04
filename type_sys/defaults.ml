@@ -15,7 +15,8 @@ let any_type = Generic_ TraitSet.empty
 
 let int_type = construct_type_no_params "int"
 let bool_type = construct_type_no_params "bool"
-let string_type = construct_type_no_params "String"
+let symbol_type = construct_type_no_params "symbol"
+let string_type = construct_type_no_params "string"
 let unit_type = construct_type_no_params "unit"
 let double_type = construct_type_no_params "double"
 let array_type =
@@ -33,6 +34,7 @@ let initial_type_state =
     (List.map f [ int_type
                 ; bool_type
                 ; string_type
+                ; symbol_type
                 ; unit_type
                 ; double_type
                 ; array_type

@@ -84,6 +84,17 @@ let%test "type_expr_multi" =
     ]) -> true
   | _ -> false
 
+let%test "type_expr_multi_fun" =
+  let parsed : (Types.type_expr, string) result =
+    parse_string ~consume:Prefix type_expr_p
+                 "ning lol x -> (bing bong tex -> zeit)" in
+  match parsed with
+  | Ok (`Multi
+    [ `Single (["ning"; "lol"], "x")
+    ; `Multi [`Single ((["bing"; "bong"]), "tex"); `Single ([], "zeit")]
+    ]) -> true
+  | _ -> false
+
 let%test "sum_type_succ" =
   let parsed =
     parse_string ~consume:Prefix sum_type_p
@@ -188,4 +199,51 @@ let%test "list_p_inner" = let open Stdlib in
   let first_list = `ListLit [`Identifier "+"; `IntLit 1; `IntLit 2] in
   match parsed with
   | Ok (`ListLit [`IntLit 1; `StringLit "hi"; l]) when l = first_list -> true
+  | _ -> false
+
+let%test "typed_p" = let open Stdlib in
+  let parsed =
+    parse_string ~consume:Prefix exp_p "(typed (a b) '(+ 1 2))" in
+  let lis = [`Identifier "+"; `IntLit 1; `IntLit 2] in
+  let typ = `Single (["a"], "b") in
+  match parsed with
+  | Ok (`Typed (t, `ListLit l)) when t = typ && l = lis -> true
+  | _ -> false
+
+let%test "deftype_sum_all_prog" =
+  let parsed =
+    parse_string ~consume:All prog_p
+    "(deftype (a b c)
+               (where (a is [Eq]) (b is [Ord, Show]))
+        (Some of x, None ))" in
+  let texpr = `Single (["a"; "b"], "c") in
+  let whereexpr = ["a", ["Eq"]; "b", ["Ord"; "Show"]] in
+  let sumexpr = [("Some", Some (`Single ([], "x"))); ("None", None)] in
+  let open Stdlib in
+  match parsed with
+  | Ok [(`DefType (a, b, c))] when (a = texpr && b = whereexpr && c = `Sum sumexpr) -> true
+  | _ -> false
+
+let%test "deftype_sum_all_compact" =
+  let parsed =
+    parse_string ~consume:All exp_p
+    "(deftype (a b c) (where (a is [Eq]) (b is [Ord, Show])) (Some of x, None ))" in
+  let texpr = `Single (["a"; "b"], "c") in
+  let whereexpr = ["a", ["Eq"]; "b", ["Ord"; "Show"]] in
+  let sumexpr = [("Some", Some (`Single ([], "x"))); ("None", None)] in
+  let open Stdlib in
+  match parsed with
+  | Ok (`DefType (a, b, c)) when (a = texpr && b = whereexpr && c = `Sum sumexpr) -> true
+  | _ -> false
+
+let%test "deftype_prod_all_compact" =
+  let parsed =
+    parse_string ~consume:Prefix exp_p
+    "(deftype (a b c) (where (a is [Eq]) (b is [Ord, Show])) {Some of x, None of a b s})" in
+  let texpr = `Single (["a"; "b"], "c") in
+  let whereexpr = ["a", ["Eq"]; "b", ["Ord"; "Show"]] in
+  let prodexpr = [("Some", `Single ([], "x")); ("None", `Single (["a"; "b"], "s"))] in
+  let open Stdlib in
+  match parsed with
+  | Ok (`DefType (a, b, c)) when (a = texpr && b = whereexpr && c = `Prod prodexpr) -> true
   | _ -> false

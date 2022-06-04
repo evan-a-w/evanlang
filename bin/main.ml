@@ -1,4 +1,1 @@
-open Schoml.Test_parser
-
-let () =
- run_tests ()
+let () = print_string "hello world\n"
