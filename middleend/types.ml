@@ -10,5 +10,5 @@ type middle_exp =
   | `Identifier of string * Types.typ
   | `ListLit of middle_exp list * Types.typ
   | `ArrayLit of middle_exp array * Types.typ
-  | `Function of middle_exp * Types.typ
+  | `Function of ((string list) * middle_exp) * Types.typ
   | `Call of (middle_exp * (middle_exp list)) * Types.typ ]

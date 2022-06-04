@@ -247,3 +247,10 @@ let%test "deftype_prod_all_compact" =
   match parsed with
   | Ok (`DefType (a, b, c)) when (a = texpr && b = whereexpr && c = `Prod prodexpr) -> true
   | _ -> false
+
+let%test "fn_p" =
+  let parsed =
+    parse_string ~consume:Prefix exp_p "(fn (a b c) (+ a b))" in
+  match parsed with
+  | Ok (`Function (["a"; "b"; "c"], `Call (`Identifier "+", [`Identifier "a"; `Identifier "b"]))) -> true
+  | _ -> false

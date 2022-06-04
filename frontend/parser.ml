@@ -69,8 +69,6 @@ let comma_sep = ws *> char ',' *> ws
 
 let delimitedws a b p = ws *> char a *> ws *> p <* ws <* char b <* ws
 
-let delimitedwsparen : 'a Angstrom.t -> 'a Angstrom.t = delimitedws '(' ')'
-
 let call_p exp_p =
   (fun x -> `Call x)
   <$> ws *> char '(' *> ws *> both (exp_p <* ws) (sep_by ws1 exp_p) <* ws <* char ')'
@@ -108,13 +106,18 @@ let type_expr_p : type_expr Angstrom.t = fix (fun f ->
     <$> (sep_by1 (ws *> string "->" *> ws)
                  (one <|> (char '(' *> ws *> f <* ws <* char ')'))))
 
-let typed_p : exp Angstrom.t -> (type_expr * exp) Angstrom.t = fun exp_p ->
-    let paren_type_expr_p = delimitedwsparen type_expr_p in
-    let ws_exp_p = ws *> exp_p in
-    let get_typed = string "typed" *> ws in
-    let inner : (type_expr * exp) Angstrom.t
-      = get_typed *> both paren_type_expr_p ws_exp_p in
-    delimitedws '(' ')' inner
+let call_of s first second =
+  let paren_first = delimitedws '(' ')' first in
+  let ws_second = ws *> second in
+  let get_s = string s *> ws in
+  let inner = ws *> get_s *> both paren_first ws_second in
+  delimitedws '(' ')' inner
+
+let typed_p = call_of "typed" type_expr_p
+
+let let_p = call_of "let" identifier_p
+
+let fn_p = call_of "fn" (sep_by ws identifier_p)
 
 let typed_exp_p exp_p =
     let to_map x = `Typed x in
@@ -165,6 +168,8 @@ let exp_p : exp Angstrom.t = fix (fun f ->
   <|> ((fun s -> `SymbolLit s) <$> symbol_p)
   <|> list_p f
   <|> array_p f
+  <|> ((fun x -> `Let x) <$> let_p f)
+  <|> ((fun x -> `Function x) <$> fn_p f)
   <|> typed_exp_p f
   <|> call_p f
   <|> deftype_expr

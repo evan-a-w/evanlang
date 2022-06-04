@@ -10,9 +10,11 @@ type exp =
   | `ArrayLit of exp array
   | `Call of exp * (exp list)
   | `DefType of type_expr * trait_spec * type_lit
-  | `Typed of type_expr * exp ]
+  | `Typed of type_expr * exp
+  | `Let of string * exp
+  | `Function of (string list) * exp
+  ]
   (* TODO: def trait needs to be done *)
-  (* TODO: let expr and function *)
 and type_lit =
   [ `Sum of (string * (type_expr option)) list
   | `Prod of (string * type_expr) list ]
