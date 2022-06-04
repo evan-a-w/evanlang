@@ -95,8 +95,10 @@ let type_expr_p : type_expr Angstrom.t = fix (fun f ->
       | x :: xs ->
         let (first, last) = aux xs in
         (x :: first, last) in
-    (fun x -> `Single (aux x)) <$> sep_by1 ws1 identifier_p in
-  ((fun x -> `Multi x) <$> sep_by1 (ws1 *> string "->" *> ws1) f) <|> one)
+    (fun x -> `Single (aux x)) <$> many (ws *> identifier_p <* ws) in
+  ((fun x -> `Multi x) <$> sep_by1 (ws1 *> string "->" *> ws1)
+            (one <|> (char '(' *> ws *> f <* ws <* char ')')))
+  <|> one)
 
 let sum_type_p = let open Angstrom.Let_syntax in
   let one =
@@ -124,13 +126,6 @@ let deftype_expr = let open Angstrom.Let_syntax in
   let%bind res = inner in
   ws *> char ')' *> return res
   
-let var_decl_p = let open Angstrom.Let_syntax in
-  ws *> char '(' *> ws *>
-  let%bind id = identifier_p in
-  ws1 *> string "of" *> ws1 *>
-  let%bind texpr = type_expr_p in
-  return (`VarDecl (id, Some texpr))
-
 let list_p exp_p = let open Angstrom.Let_syntax in
   string "'(" *>
   let%bind l = sep_by ws1 exp_p in
@@ -147,10 +142,9 @@ let exp_p : exp Angstrom.t = fix (fun f ->
   <|> ((fun f -> `FloatLit f) <$> float_p)
   <|> ((fun i -> `IntLit i) <$> int_p)
   <|> ((fun s -> `StringLit s) <$> string_p)
-  <|> var_decl_p
+  <|> ((fun s -> `SymbolLit s) <$> symbol_p)
+  <|> deftype_expr
   <|> list_p f
   <|> array_p f
   <|> call_p f
-  <|> ((fun s -> `Identifier s) <$> identifier_p)
-  <|> ((fun s -> `SymbolLit s) <$> symbol_p)
-  <|> deftype_expr)
+  <|> ((fun s -> `Identifier s) <$> identifier_p))

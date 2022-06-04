@@ -82,7 +82,6 @@ let%test "type_expr_multi" =
     ; `Single (["bing"; "bong"], "tex")
     ; `Single ([], "zeit")
     ]) -> true
-  | Ok l -> Types.print_type_expr_types l; false
   | _ -> false
 
 let%test "sum_type_succ" =
@@ -99,14 +98,6 @@ let%test "prod_type_succ" =
                  " {Some of x, None of a b c } " in
   match parsed with
   | Ok [("Some", `Single ([], "x")); ("None", `Single (["a"; "b"], "c"))] -> true
-  | _ -> false
-
-let%test "var_decl_succ" =
-  let parsed =
-    parse_string ~consume:Prefix exp_p
-                 "( yo of  a b c )" in
-  match parsed with
-  | Ok (`VarDecl ("yo", Some (`Single (["a"; "b"], "c")))) -> true
   | _ -> false
 
 let%test "deftype_sum_all" =
