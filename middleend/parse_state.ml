@@ -29,3 +29,25 @@ let add_type ps (t_expr, t_spec, t_lit) = let open Option.Let_syntax in
   Some { ps with t_state = Types.add_type ps.t_state (type_name, new_type);
                  t_map = Types.StringMap.add type_name t_lit ps.t_map;
        }
+
+let folding_map_option :
+  exp Base.Sequence.t
+  -> init:parse_state
+  -> f:(parse_state -> exp -> (parse_state * Middle_types.middle_exp) option)
+  -> (parse_state * Middle_types.middle_exp Base.Sequence.t) option
+  = fun seq ~init ~f ->
+  let unit_val = `Unit, Type_sys.(Types.Concrete_ Defaults.unit_type) in
+  let state_ref = ref (Some init) in
+  let new_f v = let bound = Option.bind !state_ref ~f:(fun x ->
+      match f x v with
+      | Some (new_state, res) ->
+        (state_ref := Some new_state;
+         Some res)
+      | None ->
+        (state_ref := None;
+         Some unit_val)) in
+    Option.value bound ~default:unit_val in
+  let res = Sequence.map seq ~f:new_f in
+  match !state_ref with
+  | None -> None
+  | Some x -> Some (x, res)

@@ -18,7 +18,7 @@ let bool_type = construct_type_no_params "bool"
 let symbol_type = construct_type_no_params "symbol"
 let string_type = construct_type_no_params "string"
 let unit_type = construct_type_no_params "unit"
-let double_type = construct_type_no_params "double"
+let float_type = construct_type_no_params "float"
 let array_type =
   construct_type "Array"
                  (StringMap.of_seq (List.to_seq [("a", any_type)]))
@@ -36,7 +36,7 @@ let initial_type_state =
                 ; string_type
                 ; symbol_type
                 ; unit_type
-                ; double_type
+                ; float_type
                 ; array_type
                 ; list_type
                 ])
